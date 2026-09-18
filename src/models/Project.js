@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { DEFAULT_TEMPLATES } from "../utils/templates";
 
 const ProjectSchema = new mongoose.Schema({
     editCode: {
@@ -21,15 +22,15 @@ const ProjectSchema = new mongoose.Schema({
     },
     html: {
         type: String,
-        default: "",
+        default: () => DEFAULT_TEMPLATES.html,
     },
     css: {
         type: String,
-        default: "",
+        default: () => DEFAULT_TEMPLATES.css,
     },
     javascript: {
         type: String,
-        default: "",
+        default: () => DEFAULT_TEMPLATES.javascript,
     },
     userId: {
         type: mongoose.Schema.Types.ObjectId,

@@ -1,12 +1,12 @@
 import { GoogleGenAI } from "@google/genai";
 
-const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY;
 
 if (!API_KEY) {
-    console.error("CRITICAL: NEXT_PUBLIC_GEMINI_API_KEY is missing from environment variables.");
+    console.error("CRITICAL: Gemini API Key is missing. Ensure NEXT_PUBLIC_GEMINI_API_KEY is set in Vercel Environment Variables.");
 }
 
-// Initialize GoogleGenAI using the public key
+// Initialize GoogleGenAI using the key
 const ai = new GoogleGenAI({ apiKey: API_KEY || "" });
 const CODING_SYSTEM_PROMPT = `You are Origin Assistant - a specialized AI coding assistant.
 
@@ -45,7 +45,7 @@ export const createChatSession = async (initialPrompt) => {
 
         // Initialize chat using the @google/genai SDK format
         const chat = ai.chats.create({
-            model: "gemini-3-flash-preview",
+            model: "gemini-2.5-flash",
             config: {
                 systemInstruction: systemInstruction,
                 temperature: 1.0,
@@ -93,7 +93,7 @@ export const sendMessage = async (chatSession, message) => {
 export const generateResponse = async (prompt) => {
     try {
         const response = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
+            model: "gemini-2.5-flash",
             contents: prompt,
             config: {
                 temperature: 1.0,
@@ -148,7 +148,7 @@ Make sure the code is complete, functional, and follows best practices. The HTML
 `;
 
         const response = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
+            model: "gemini-2.5-flash",
             contents: enhancedPrompt,
             config: {
                 temperature: 1.0,

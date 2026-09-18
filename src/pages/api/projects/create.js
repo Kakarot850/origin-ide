@@ -5,11 +5,12 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]";
 import mongoose from "mongoose";
 
+import { DEFAULT_TEMPLATES } from "@/utils/templates";
+
 export default async function handler(req, res) {
     if (req.method !== "POST") {
         return res.status(405).json({ message: "Method not allowed" });
     }
-
 
     await dbConnect();
 
@@ -22,10 +23,13 @@ export default async function handler(req, res) {
 
         // Create project with user ID if logged in
         const projectData = {
-            editCode,
-            viewCode,
             title: title || "Untitled Project",
             description: description || "",
+            html: req.body.html || DEFAULT_TEMPLATES.html,
+            css: req.body.css || DEFAULT_TEMPLATES.css,
+            javascript: req.body.javascript || DEFAULT_TEMPLATES.javascript,
+            editCode,
+            viewCode,
         };
 
         // Associate project with user if logged in and ID is valid

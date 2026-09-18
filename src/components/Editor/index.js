@@ -6,17 +6,25 @@ import axios from "axios";
 import ShareButton from "../ShareButton";
 import AIChatButton from "../AIChatButton";
 import styles from "./Editor.module.css";
-import { FiSave, FiCode, FiLayout, FiColumns, FiEye, FiGrid, FiHome, FiEdit, FiCheck, FiSettings, FiInfo, FiX } from "react-icons/fi";
+import { FiSave, FiCode, FiLayout, FiColumns, FiEye, FiGrid, FiHome, FiEdit, FiCheck, FiSettings, FiInfo, FiX, FiRotateCcw } from "react-icons/fi";
+import { DEFAULT_TEMPLATES } from "@/utils/templates";
 
 export default function CodeEditor({ initialData, readOnly, editCode, viewCode }) {
     const router = useRouter();
     const { data: session } = useSession();
     const isAuthenticated = !!session;
 
+    const hasInitialCode = initialData && (initialData.html || initialData.css || initialData.javascript);
     const [activeTab, setActiveTab] = useState("html");
-    const [html, setHtml] = useState(initialData?.html || "");
-    const [css, setCss] = useState(initialData?.css || "");
-    const [js, setJs] = useState(initialData?.javascript || "");
+    const [html, setHtml] = useState(
+        hasInitialCode ? (initialData.html || "") : (initialData?.html ? initialData.html : DEFAULT_TEMPLATES.html)
+    );
+    const [css, setCss] = useState(
+        hasInitialCode ? (initialData.css || "") : (initialData?.css ? initialData.css : DEFAULT_TEMPLATES.css)
+    );
+    const [js, setJs] = useState(
+        hasInitialCode ? (initialData.javascript || "") : (initialData?.javascript ? initialData.javascript : DEFAULT_TEMPLATES.javascript)
+    );
     const [saveStatus, setSaveStatus] = useState("");
     const [projectTitle, setProjectTitle] = useState(initialData?.title || "Untitled Project");
     const [projectDescription, setProjectDescription] = useState(initialData?.description || "");
@@ -120,21 +128,51 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
     };
 
     const generateOutput = () => {
-        return `
-            <!DOCTYPE html>
-            <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>${projectTitle}</title>
-                    <style>${css}</style>
-                </head>
-                <body>
-                    ${html}
-                    <script>${js}</script>
-                </body>
-            </html>
-        `;
+        const titleTag = `<title>${projectTitle || "Origin IDE"}</title>`;
+        const styleTag = `<style>${css || ""}</style>`;
+        const scriptTag = `<script>\ntry {\n${js || ""}\n} catch (err) {\n  console.error("Preview script error:", err);\n}\n</script>`;
+
+        const rawHtml = html || "";
+
+        if (rawHtml.includes("<html") || rawHtml.includes("<!DOCTYPE") || rawHtml.includes("<body")) {
+            let output = rawHtml;
+
+            // Inject styles into head or at start
+            if (output.includes("</head>")) {
+                output = output.replace(/<\/head>/i, `${styleTag}</head>`);
+            } else if (output.includes("<head>")) {
+                output = output.replace(/<head>/i, `<head>${styleTag}`);
+            } else if (output.includes("<body")) {
+                output = output.replace(/<body/i, `${styleTag}<body`);
+            } else {
+                output = `${styleTag}${output}`;
+            }
+
+            // Inject scripts before closing body or at end
+            if (output.includes("</body>")) {
+                output = output.replace(/<\/body>/i, `${scriptTag}</body>`);
+            } else if (output.includes("</html>")) {
+                output = output.replace(/<\/html>/i, `${scriptTag}</html>`);
+            } else {
+                output = `${output}${scriptTag}`;
+            }
+
+            return output;
+        }
+
+        return `<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        ${titleTag}
+        ${styleTag}
+    </head>
+    <body>
+        ${rawHtml}
+        ${scriptTag}
+    </body>
+</html>`;
     };
 
     const handleTitleSave = () => {
@@ -157,6 +195,20 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
 
     const goToDashboard = () => {
         router.push("/dashboard");
+    };
+
+    const handleResetToBoilerplate = () => {
+        if (readOnly) return;
+        const confirmReset = window.confirm(
+            "Replace current workspace contents with default starter boilerplate?"
+        );
+        if (confirmReset) {
+            setHtml(DEFAULT_TEMPLATES.html);
+            setCss(DEFAULT_TEMPLATES.css);
+            setJs(DEFAULT_TEMPLATES.javascript);
+            setSaveStatus("Reset to boilerplate!");
+            setTimeout(() => setSaveStatus(""), 2000);
+        }
     };
 
     // Handle code generated from AI
@@ -205,15 +257,26 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
 
                 <div className={styles.actions}>
                     {!readOnly && (
-                        <button
-                            className={`${styles.actionButton} ${styles.saveButton}`}
-                            onClick={saveProject}
-                            disabled={isSaving}
-                            title="Save Project"
-                        >
-                            <FiSave size={16} />
-                            <span>{isSaving ? "Saving..." : "Save"}</span>
-                        </button>
+                        <>
+                            <button
+                                className={`${styles.actionButton} ${styles.saveButton}`}
+                                onClick={saveProject}
+                                disabled={isSaving}
+                                title="Save Project"
+                            >
+                                <FiSave size={16} />
+                                <span>{isSaving ? "Saving..." : "Save"}</span>
+                            </button>
+
+                            <button
+                                className={styles.resetButton}
+                                onClick={handleResetToBoilerplate}
+                                title="Reset to Boilerplate Code"
+                            >
+                                <FiRotateCcw size={16} />
+                                <span>Reset</span>
+                            </button>
+                        </>
                     )}
 
                     <div className={styles.layoutControls}>
@@ -328,7 +391,7 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
                             <FiEye size={16} />
                         </button>
                     </div>
-                    <iframe srcDoc={generateOutput()} title="preview" sandbox="allow-scripts" className={styles.previewFrame} />
+                    <iframe srcDoc={generateOutput()} title="preview" sandbox="allow-scripts allow-modals allow-forms allow-popups" className={styles.previewFrame} />
                 </div>
             </div>
 
