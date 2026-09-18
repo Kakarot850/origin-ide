@@ -101,6 +101,20 @@
     color: #4ecdc4;
 }
 
+.typePill {
+    font-size: 0.725rem;
+    font-weight: 600;
+    padding: 0.2rem 0.55rem;
+    border-radius: 9999px;
+    background-color: rgba(78, 205, 196, 0.12);
+    color: #4ecdc4;
+    border: 1px solid rgba(78, 205, 196, 0.25);
+    margin-left: 0.65rem;
+    letter-spacing: 0.02em;
+    user-select: none;
+    white-space: nowrap;
+}
+
 .actions {
     display: flex;
     align-items: center;

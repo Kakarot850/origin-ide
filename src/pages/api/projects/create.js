@@ -5,7 +5,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]";
 import mongoose from "mongoose";
 
-import { DEFAULT_TEMPLATES } from "@/utils/templates";
+import { DEFAULT_TEMPLATES, REACT_TEMPLATES } from "@/utils/templates";
 
 export default async function handler(req, res) {
     if (req.method !== "POST") {
@@ -15,7 +15,9 @@ export default async function handler(req, res) {
     await dbConnect();
 
     try {
-        const { title, description } = req.body || {};
+        const { title, description, projectType = "vanilla" } = req.body || {};
+        const validProjectType = projectType === "react" ? "react" : "vanilla";
+        const template = validProjectType === "react" ? REACT_TEMPLATES : DEFAULT_TEMPLATES;
         const { editCode, viewCode } = generateProjectCodes();
 
         // Get user session
@@ -72,9 +74,10 @@ export default async function handler(req, res) {
         const projectData = {
             title: finalTitle,
             description: description || "",
-            html: req.body?.html || DEFAULT_TEMPLATES.html,
-            css: req.body?.css || DEFAULT_TEMPLATES.css,
-            javascript: req.body?.javascript || DEFAULT_TEMPLATES.javascript,
+            projectType: validProjectType,
+            html: req.body?.html || template.html,
+            css: req.body?.css || template.css,
+            javascript: req.body?.javascript || template.javascript,
             editCode,
             viewCode,
         };
@@ -90,6 +93,7 @@ export default async function handler(req, res) {
             viewCode: project.viewCode,
             title: project.title,
             description: project.description,
+            projectType: project.projectType,
         });
     } catch (error) {
         console.error("Error creating project:", error);

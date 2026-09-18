@@ -6,9 +6,9 @@ import axios from "axios";
 import ShareButton from "../ShareButton";
 import AIChatButton from "../AIChatButton";
 import styles from "./Editor.module.css";
-import { FiSave, FiCode, FiLayout, FiColumns, FiEye, FiGrid, FiHome, FiEdit, FiCheck, FiSettings, FiInfo, FiX, FiRotateCcw, FiAlignLeft } from "react-icons/fi";
-import { DEFAULT_TEMPLATES } from "@/utils/templates";
-import { emmetHTML, emmetCSS } from "emmet-monaco-es";
+import { FiSave, FiCode, FiLayout, FiColumns, FiEye, FiGrid, FiHome, FiEdit, FiCheck, FiSettings, FiInfo, FiX, FiRotateCcw, FiAlignLeft, FiZap } from "react-icons/fi";
+import { DEFAULT_TEMPLATES, REACT_TEMPLATES } from "@/utils/templates";
+import { emmetHTML, emmetCSS, emmetJSX } from "emmet-monaco-es";
 
 let emmetConfigured = false;
 let prettierCache = null;
@@ -38,16 +38,19 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
     const { data: session } = useSession();
     const isAuthenticated = !!session;
 
+    const projectType = initialData?.projectType || "vanilla";
+    const defaultTemplate = projectType === "react" ? REACT_TEMPLATES : DEFAULT_TEMPLATES;
+
     const hasInitialCode = initialData && (initialData.html || initialData.css || initialData.javascript);
-    const [activeTab, setActiveTab] = useState("html");
+    const [activeTab, setActiveTab] = useState(projectType === "react" ? "js" : "html");
     const [html, setHtml] = useState(
-        hasInitialCode ? (initialData.html || "") : (initialData?.html ? initialData.html : DEFAULT_TEMPLATES.html)
+        hasInitialCode ? (initialData.html || "") : (initialData?.html ? initialData.html : defaultTemplate.html)
     );
     const [css, setCss] = useState(
-        hasInitialCode ? (initialData.css || "") : (initialData?.css ? initialData.css : DEFAULT_TEMPLATES.css)
+        hasInitialCode ? (initialData.css || "") : (initialData?.css ? initialData.css : defaultTemplate.css)
     );
     const [js, setJs] = useState(
-        hasInitialCode ? (initialData.javascript || "") : (initialData?.javascript ? initialData.javascript : DEFAULT_TEMPLATES.javascript)
+        hasInitialCode ? (initialData.javascript || "") : (initialData?.javascript ? initialData.javascript : defaultTemplate.javascript)
     );
     const [saveStatus, setSaveStatus] = useState("");
     const [projectTitle, setProjectTitle] = useState(initialData?.title || "Untitled Project");
@@ -132,8 +135,8 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
         },
         {
             id: "js",
-            label: "JS",
-            icon: <FiCode size={16} />,
+            label: projectType === "react" ? "App.jsx" : "JS",
+            icon: <FiZap size={16} />,
             language: "javascript",
         },
     ];
@@ -151,23 +154,25 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
             handleFormatCodeRef.current?.();
         });
 
-        // Register Emmet for HTML and CSS using a single-instance guard to prevent duplicate bindings on re-mounts
+        // Register Emmet for HTML, CSS, and JSX/React using a single-instance guard to prevent duplicate bindings on re-mounts
         if (!emmetConfigured && typeof window !== "undefined") {
             try {
                 emmetHTML(monaco, ["html"]);
                 emmetCSS(monaco, ["css"]);
+                emmetJSX(monaco, ["javascript", "javascriptreact"]);
                 emmetConfigured = true;
             } catch (error) {
                 console.error("Failed to initialize Emmet:", error);
             }
         }
 
-        // Configure JavaScript compiler options to target ES2020 with allowJs: true
+        // Configure JavaScript compiler options with JSX support
         if (monaco.languages?.typescript?.javascriptDefaults) {
             monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
                 target: monaco.languages.typescript.ScriptTarget?.ES2020 ?? 7,
                 allowNonTsExtensions: true,
                 allowJs: true,
+                jsx: monaco.languages.typescript.JsxEmit?.React ?? 2,
             });
             monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
                 noSemanticValidation: false,
@@ -374,6 +379,93 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
         const titleTag = `<title>${customTitle || "Origin IDE"}</title>`;
         const rawHtml = customHtml || "";
         const darkCanvasReset = `<meta name="color-scheme" content="dark">\n<style id="origin-dark-reset">\n:root { color-scheme: dark; }\nhtml, body {\n  background-color: #0f172a;\n  color: #f8fafc;\n  color-scheme: dark;\n  margin: 0;\n}\n</style>`;
+
+        if (projectType === "react") {
+            const tailwindScript = '<script src="https://cdn.tailwindcss.com"></script>';
+            const reactScripts = `<script crossorigin src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.js"></script>\n<script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.development.js"></script>\n<script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>`;
+            const styleTag = `<style>${customCss || ""}</style>`;
+            const headTags = `${darkCanvasReset}\n${tailwindScript}\n${reactScripts}\n${styleTag}`;
+
+            let bodyContent = rawHtml;
+            if (!bodyContent.includes('id="root"')) {
+                bodyContent = `<div id="root"></div>\n${bodyContent}`;
+            }
+
+            const runnerScript = `<script>
+(function() {
+    function renderError(title, err) {
+        var root = document.getElementById("root");
+        var msg = (err && (err.stack || err.message)) ? (err.stack || err.message) : String(err);
+        if (root) {
+            root.innerHTML = '<div style="color: #f87171; background: #0f172a; padding: 1.25rem; border-radius: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; line-height: 1.5; white-space: pre-wrap; margin: 1.5rem; border: 1px solid rgba(239, 68, 68, 0.4); box-shadow: 0 10px 25px rgba(0,0,0,0.5);">' +
+                '<div style="display:flex;align-items:center;margin-bottom:8px;font-weight:700;color:#fca5a5;font-size:14px;">' +
+                '<span style="margin-right:8px;font-size:16px;">⚠️</span>' + title +
+                '</div>' +
+                '<div style="opacity:0.9;">' + msg.replace(/</g, "&lt;").replace(/>/g, "&gt;") + '</div>' +
+                '</div>';
+        }
+    }
+
+    window.addEventListener("error", function(e) {
+        renderError("Runtime Error", e.error || e.message);
+    });
+
+    var userCode = ${JSON.stringify(customJs || "")};
+
+    function executeReact() {
+        if (!window.Babel || !window.React || !window.ReactDOM) {
+            return false;
+        }
+        try {
+            var compiled = window.Babel.transform(userCode, {
+                presets: [
+                    ['react', { runtime: 'classic' }],
+                    ['env', { targets: { browsers: ['defaults'] } }]
+                ]
+            }).code;
+
+            var scriptEl = document.createElement("script");
+            scriptEl.text = compiled;
+            document.body.appendChild(scriptEl);
+            return true;
+        } catch (err) {
+            console.error("React Preview Compilation Error:", err);
+            renderError("Compilation Error", err);
+            return true;
+        }
+    }
+
+    if (executeReact()) return;
+
+    var attempts = 0;
+    var maxAttempts = 150;
+    var timer = setInterval(function() {
+        attempts++;
+        if (executeReact() || attempts >= maxAttempts) {
+            clearInterval(timer);
+            if (attempts >= maxAttempts && (!window.Babel || !window.React || !window.ReactDOM)) {
+                renderError("Script Load Error", "Failed to load React or Babel CDN. Please check your network connection.");
+            }
+        }
+    }, 30);
+})();
+</script>`;
+
+            return `<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        ${titleTag}
+        ${headTags}
+    </head>
+    <body>
+        ${bodyContent}
+        ${runnerScript}
+    </body>
+</html>`;
+        }
+
         const tailwindScript = rawHtml.includes("cdn.tailwindcss.com") ? "" : '<script src="https://cdn.tailwindcss.com"></script>';
         const styleTag = `<style>${customCss || ""}</style>`;
         const headTags = `${darkCanvasReset}\n${tailwindScript}\n${styleTag}`;
@@ -418,7 +510,7 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
         ${scriptTag}
     </body>
 </html>`;
-    }, [html, css, js, projectTitle]);
+    }, [html, css, js, projectTitle, projectType]);
 
     // Debounced iframe srcDoc to prevent DOM thrashing and lag while typing
     const [debouncedSrcDoc, setDebouncedSrcDoc] = useState(() => generateOutput(html, css, js, projectTitle));
@@ -463,16 +555,17 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
     const handleResetToBoilerplate = useCallback(() => {
         if (readOnly) return;
         const confirmReset = window.confirm(
-            "Replace current workspace contents with default starter boilerplate?"
+            `Replace current workspace contents with default starter boilerplate for ${projectType === "react" ? "React + Tailwind" : "Vanilla Web"}?`
         );
         if (confirmReset) {
-            setHtml(DEFAULT_TEMPLATES.html);
-            setCss(DEFAULT_TEMPLATES.css);
-            setJs(DEFAULT_TEMPLATES.javascript);
+            const template = projectType === "react" ? REACT_TEMPLATES : DEFAULT_TEMPLATES;
+            setHtml(template.html);
+            setCss(template.css);
+            setJs(template.javascript);
             setSaveStatus("Reset to boilerplate!");
             setTimeout(() => setSaveStatus(""), 2000);
         }
-    }, [readOnly]);
+    }, [readOnly, projectType]);
 
     const [isFormatting, setIsFormatting] = useState(false);
 
@@ -646,6 +739,9 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
                             style={{ cursor: !readOnly && isOwner ? "pointer" : "default" }}
                         >
                             <span>{projectTitle}</span>
+                            <span className={styles.typePill}>
+                                {projectType === "react" ? "React + Tailwind" : "Vanilla"}
+                            </span>
                             {!readOnly && isOwner && (
                                 <button
                                     className={styles.editButton}

@@ -41,6 +41,12 @@ const ProjectSchema = new mongoose.Schema({
         type: Boolean,
         default: true,
     },
+    projectType: {
+        type: String,
+        enum: ["vanilla", "react"],
+        default: "vanilla",
+        required: true,
+    },
     createdAt: {
         type: Date,
         default: Date.now,
