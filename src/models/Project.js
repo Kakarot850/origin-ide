@@ -51,4 +51,7 @@ const ProjectSchema = new mongoose.Schema({
     },
 });
 
+// Compound index for dashboard queries and sorting
+ProjectSchema.index({ userId: 1, lastUpdated: -1 });
+
 export default mongoose.models.Project || mongoose.model("Project", ProjectSchema);

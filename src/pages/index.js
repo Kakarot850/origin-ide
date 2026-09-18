@@ -2,14 +2,17 @@ import { useRouter } from "next/router";
 import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import Head from "next/head";
+import Script from "next/script";
 import styles from "../styles/Home.module.css";
 import Link from "next/link";
-import LoginModal from "../components/LoginModal";
-import SignupModal from "../components/SignupModal";
-import CreateProjectModal from "../components/CreateProjectModal";
+import dynamic from "next/dynamic";
 import FeatureCard from "../components/FeatureCard";
 import CodeEditorPreview from "../components/CodeEditorPreview";
-import { FiCode, FiShare2, FiZap, FiLayers, FiMonitor, FiArrowRight, FiLogOut, FiGithub, FiLinkedin } from "react-icons/fi";
+
+const LoginModal = dynamic(() => import("../components/LoginModal"), { ssr: false });
+const SignupModal = dynamic(() => import("../components/SignupModal"), { ssr: false });
+const CreateProjectModal = dynamic(() => import("../components/CreateProjectModal"), { ssr: false });
+import { FiCode, FiShare2, FiZap, FiLayers, FiMonitor, FiArrowRight, FiLogOut, FiGithub, FiLinkedin, FiAlignLeft } from "react-icons/fi";
 
 export default function Home() {
     const router = useRouter();
@@ -131,6 +134,11 @@ export default function Home() {
             description: "Get intelligent code suggestions and answers to your programming questions directly within the editor.",
         },
         {
+            icon: <FiLayers size={32} />,
+            title: "Instant Tailwind CSS",
+            description: "Zero configuration or setup needed. Prototype instantly with full Tailwind CSS utility classes in your HTML.",
+        },
+        {
             icon: <FiMonitor size={32} />,
             title: "Live Preview",
             description: "See your changes instantly with a real-time preview that updates as you type.",
@@ -139,6 +147,11 @@ export default function Home() {
             icon: <FiShare2 size={32} />,
             title: "Easy Sharing",
             description: "Share your projects with others using a simple link. Choose between view-only or editable access.",
+        },
+        {
+            icon: <FiAlignLeft size={32} />,
+            title: "Instant Code Beautification",
+            description: "Keep your project organized with one-click automatic formatting and indentation for HTML, CSS, and modern JavaScript.",
         },
     ];
 
@@ -166,8 +179,8 @@ export default function Home() {
                 <meta name="twitter:card" content="summary_large_image" />
                 <link rel="icon" href="/favicon.ico" />
                 <link rel="canonical" href="https://origin-ide.vercel.app" />
-                <script defer src="https://cloud.umami.is/script.js" data-website-id="d7e18806-3d6f-4107-a5ba-9d8d4ea50644"></script>
             </Head>
+            <Script src="https://cloud.umami.is/script.js" data-website-id="d7e18806-3d6f-4107-a5ba-9d8d4ea50644" strategy="afterInteractive" />
 
             {/* Header */}
             <header className={styles.header}>

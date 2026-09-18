@@ -25,10 +25,11 @@ export default async function handler(req, res) {
             return res.status(400).json({ message: "Invalid user ID format" });
         }
 
-        // Get user's projects
+        // Get user's projects with lean query (skips Mongoose hydration overhead)
         const projects = await Project.find({ userId: session.user.id })
             .sort({ lastUpdated: -1 })
-            .select("title description editCode viewCode createdAt lastUpdated");
+            .select("title description editCode viewCode createdAt lastUpdated")
+            .lean();
 
         return res.status(200).json({ projects });
     } catch (error) {

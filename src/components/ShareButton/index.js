@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { useSession } from "next-auth/react";
 import styles from "./ShareButton.module.css";
 import { FiShare2, FiCopy, FiEdit, FiEye, FiLock } from "react-icons/fi";
 
-export default function ShareButton({ editCode, viewCode, isGuest = false }) {
+function ShareButton({ editCode, viewCode, isGuest = false }) {
     const { data: session } = useSession();
     const isAuthenticated = !!session;
     const [showModal, setShowModal] = useState(false);
@@ -11,7 +11,8 @@ export default function ShareButton({ editCode, viewCode, isGuest = false }) {
     const [activeLink, setActiveLink] = useState("view"); // Default to view for guests
     const [showLoginPrompt, setShowLoginPrompt] = useState(false);
 
-    const shareUrl = `${window.location.origin}/editor/${activeLink === "edit" ? editCode : viewCode}`;
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const shareUrl = `${origin}/editor/${activeLink === "edit" ? editCode : viewCode}`;
 
     const copyToClipboard = () => {
         navigator.clipboard.writeText(shareUrl);
@@ -100,3 +101,5 @@ export default function ShareButton({ editCode, viewCode, isGuest = false }) {
         </>
     );
 }
+
+export default memo(ShareButton);

@@ -2,8 +2,17 @@ import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import axios from "axios";
-import Editor from "../../components/Editor";
-import AuthRequiredModal from "../../components/AuthRequiredModal";
+import dynamic from "next/dynamic";
+import EditorSkeleton from "../../components/EditorSkeleton";
+
+const Editor = dynamic(() => import("../../components/Editor"), {
+    ssr: false,
+    loading: () => <EditorSkeleton />,
+});
+
+const AuthRequiredModal = dynamic(() => import("../../components/AuthRequiredModal"), {
+    ssr: false,
+});
 
 export default function SharedEditor() {
     const router = useRouter();
@@ -69,7 +78,7 @@ export default function SharedEditor() {
         }
     };
 
-    if (loading) return <div>Loading...</div>;
+    if (loading) return <EditorSkeleton />;
     if (!project) return <div>Project not found</div>;
 
     return (

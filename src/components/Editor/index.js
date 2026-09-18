@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
 import Editor from "@monaco-editor/react";
@@ -6,11 +6,32 @@ import axios from "axios";
 import ShareButton from "../ShareButton";
 import AIChatButton from "../AIChatButton";
 import styles from "./Editor.module.css";
-import { FiSave, FiCode, FiLayout, FiColumns, FiEye, FiGrid, FiHome, FiEdit, FiCheck, FiSettings, FiInfo, FiX, FiRotateCcw } from "react-icons/fi";
+import { FiSave, FiCode, FiLayout, FiColumns, FiEye, FiGrid, FiHome, FiEdit, FiCheck, FiSettings, FiInfo, FiX, FiRotateCcw, FiAlignLeft } from "react-icons/fi";
 import { DEFAULT_TEMPLATES } from "@/utils/templates";
 import { emmetHTML, emmetCSS } from "emmet-monaco-es";
 
 let emmetConfigured = false;
+let prettierCache = null;
+
+async function getPrettier() {
+    if (!prettierCache) {
+        const [prettier, htmlPlugin, postcssPlugin, babelPlugin, estreePlugin] = await Promise.all([
+            import("prettier/standalone"),
+            import("prettier/plugins/html"),
+            import("prettier/plugins/postcss"),
+            import("prettier/plugins/babel"),
+            import("prettier/plugins/estree"),
+        ]);
+        prettierCache = {
+            prettier: prettier.default || prettier,
+            htmlPlugin: htmlPlugin.default || htmlPlugin,
+            postcssPlugin: postcssPlugin.default || postcssPlugin,
+            babelPlugin: babelPlugin.default || babelPlugin,
+            estreePlugin: estreePlugin.default || estreePlugin,
+        };
+    }
+    return prettierCache;
+}
 
 export default function CodeEditor({ initialData, readOnly, editCode, viewCode }) {
     const router = useRouter();
@@ -83,10 +104,16 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
 
     const editorRef = useRef(null);
     const monacoRef = useRef(null);
+    const handleFormatCodeRef = useRef(null);
 
     const handleEditorDidMount = (editor, monaco) => {
         editorRef.current = editor;
         monacoRef.current = monaco;
+
+        // Register Shift+Alt+F (Windows/Linux) and Shift+Option+F (Mac) for Beautify action
+        editor.addCommand(monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF, () => {
+            handleFormatCodeRef.current?.();
+        });
 
         // Register Emmet for HTML and CSS using a single-instance guard to prevent duplicate bindings on re-mounts
         if (!emmetConfigured && typeof window !== "undefined") {
@@ -222,7 +249,7 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
         },
     };
 
-    const saveProject = async () => {
+    const saveProject = useCallback(async () => {
         if (readOnly || isSaving) return; // Anyone with edit link can save
 
         try {
@@ -247,34 +274,29 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
         } finally {
             setIsSaving(false);
         }
-    };
+    }, [readOnly, isSaving, editCode, html, css, js, isOwner, projectTitle, projectDescription]);
 
-    const openPreview = () => {
-        const output = generateOutput();
-        const previewWindow = window.open("", "_blank");
-        previewWindow.document.write(output);
-        previewWindow.document.close();
-    };
-
-    const generateOutput = () => {
-        const titleTag = `<title>${projectTitle || "Origin IDE"}</title>`;
-        const styleTag = `<style>${css || ""}</style>`;
-        const scriptTag = `<script>\ntry {\n${js || ""}\n} catch (err) {\n  console.error("Preview script error:", err);\n}\n</script>`;
-
-        const rawHtml = html || "";
+    const generateOutput = useCallback((customHtml = html, customCss = css, customJs = js, customTitle = projectTitle) => {
+        const titleTag = `<title>${customTitle || "Origin IDE"}</title>`;
+        const rawHtml = customHtml || "";
+        const darkCanvasReset = `<meta name="color-scheme" content="dark">\n<style id="origin-dark-reset">\n:root { color-scheme: dark; }\nhtml, body {\n  background-color: #0f172a;\n  color: #f8fafc;\n  color-scheme: dark;\n  margin: 0;\n}\n</style>`;
+        const tailwindScript = rawHtml.includes("cdn.tailwindcss.com") ? "" : '<script src="https://cdn.tailwindcss.com"></script>';
+        const styleTag = `<style>${customCss || ""}</style>`;
+        const headTags = `${darkCanvasReset}\n${tailwindScript}\n${styleTag}`;
+        const scriptTag = `<script>\ntry {\n${customJs || ""}\n} catch (err) {\n  console.error("Preview script error:", err);\n}\n</script>`;
 
         if (rawHtml.includes("<html") || rawHtml.includes("<!DOCTYPE") || rawHtml.includes("<body")) {
             let output = rawHtml;
 
-            // Inject styles into head or at start
+            // Inject Tailwind & styles into head or at start
             if (output.includes("</head>")) {
-                output = output.replace(/<\/head>/i, `${styleTag}</head>`);
+                output = output.replace(/<\/head>/i, `${headTags}\n</head>`);
             } else if (output.includes("<head>")) {
-                output = output.replace(/<head>/i, `<head>${styleTag}`);
+                output = output.replace(/<head>/i, `<head>\n${headTags}`);
             } else if (output.includes("<body")) {
-                output = output.replace(/<body/i, `${styleTag}<body`);
+                output = output.replace(/<body/i, `${headTags}\n<body`);
             } else {
-                output = `${styleTag}${output}`;
+                output = `${headTags}\n${output}`;
             }
 
             // Inject scripts before closing body or at end
@@ -295,38 +317,56 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         ${titleTag}
-        ${styleTag}
+        ${headTags}
     </head>
     <body>
         ${rawHtml}
         ${scriptTag}
     </body>
 </html>`;
-    };
+    }, [html, css, js, projectTitle]);
 
-    const handleTitleSave = () => {
+    // Debounced iframe srcDoc to prevent DOM thrashing and lag while typing
+    const [debouncedSrcDoc, setDebouncedSrcDoc] = useState(() => generateOutput(html, css, js, projectTitle));
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSrcDoc(generateOutput(html, css, js, projectTitle));
+        }, 350);
+
+        return () => clearTimeout(timer);
+    }, [html, css, js, projectTitle, generateOutput]);
+
+    const openPreview = useCallback(() => {
+        const output = generateOutput();
+        const previewWindow = window.open("", "_blank");
+        previewWindow.document.write(output);
+        previewWindow.document.close();
+    }, [generateOutput]);
+
+    const handleTitleSave = useCallback(() => {
         setShowTitleModal(false);
         saveProject();
-    };
+    }, [saveProject]);
 
-    const handleDescriptionSave = () => {
+    const handleDescriptionSave = useCallback(() => {
         setShowDescriptionModal(false);
         saveProject();
-    };
+    }, [saveProject]);
 
-    const toggleLayout = (newLayout) => {
+    const toggleLayout = useCallback((newLayout) => {
         setLayout(newLayout);
-    };
+    }, []);
 
-    const goToHome = () => {
+    const goToHome = useCallback(() => {
         router.push("/");
-    };
+    }, [router]);
 
-    const goToDashboard = () => {
+    const goToDashboard = useCallback(() => {
         router.push("/dashboard");
-    };
+    }, [router]);
 
-    const handleResetToBoilerplate = () => {
+    const handleResetToBoilerplate = useCallback(() => {
         if (readOnly) return;
         const confirmReset = window.confirm(
             "Replace current workspace contents with default starter boilerplate?"
@@ -338,10 +378,102 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
             setSaveStatus("Reset to boilerplate!");
             setTimeout(() => setSaveStatus(""), 2000);
         }
-    };
+    }, [readOnly]);
+
+    const [isFormatting, setIsFormatting] = useState(false);
+
+    const handleFormatCode = useCallback(async () => {
+        if (readOnly) return;
+
+        const editor = editorRef.current;
+        const currentTab = activeTab; // "html" | "css" | "js"
+        const rawCode = currentTab === "html" ? html : currentTab === "css" ? css : js;
+
+        if (!rawCode || !rawCode.trim()) return;
+
+        setIsFormatting(true);
+        setSaveStatus("Formatting...");
+
+        try {
+            const { prettier, htmlPlugin, postcssPlugin, babelPlugin, estreePlugin } = await getPrettier();
+
+            let parser = "html";
+            let plugins = [htmlPlugin];
+
+            if (currentTab === "css") {
+                parser = "css";
+                plugins = [postcssPlugin];
+            } else if (currentTab === "js") {
+                parser = "babel";
+                plugins = [babelPlugin, estreePlugin];
+            }
+
+            const formatted = await prettier.format(rawCode, {
+                parser,
+                plugins,
+                tabWidth: 2,
+                singleQuote: false,
+                semi: true,
+                trailingComma: "es5",
+            });
+
+            // Preserve editor cursor position, scroll state, and push to undo history
+            if (editor) {
+                const model = editor.getModel();
+                if (model) {
+                    const position = editor.getPosition();
+                    const scrollTop = editor.getScrollTop();
+                    const scrollLeft = editor.getScrollLeft();
+
+                    editor.executeEdits("beautify", [
+                        {
+                            range: model.getFullModelRange(),
+                            text: formatted,
+                            forceMoveMarkers: true,
+                        },
+                    ]);
+                    editor.pushUndoStop();
+
+                    if (position) editor.setPosition(position);
+                    editor.setScrollTop(scrollTop);
+                    editor.setScrollLeft(scrollLeft);
+                }
+            }
+
+            // Update corresponding buffer state
+            if (currentTab === "html") setHtml(formatted);
+            else if (currentTab === "css") setCss(formatted);
+            else if (currentTab === "js") setJs(formatted);
+
+            setSaveStatus("Formatted!");
+            setTimeout(() => setSaveStatus(""), 2000);
+        } catch (err) {
+            console.warn("Prettier format failed, falling back to Monaco format action:", err);
+            if (editor) {
+                try {
+                    await editor.getAction("editor.action.formatDocument")?.run();
+                    setSaveStatus("Formatted!");
+                    setTimeout(() => setSaveStatus(""), 2000);
+                } catch (fallbackErr) {
+                    console.error("Monaco format error:", fallbackErr);
+                    setSaveStatus("Formatting failed");
+                    setTimeout(() => setSaveStatus(""), 2000);
+                }
+            } else {
+                setSaveStatus("Formatting failed");
+                setTimeout(() => setSaveStatus(""), 2000);
+            }
+        } finally {
+            setIsFormatting(false);
+        }
+    }, [readOnly, activeTab, html, css, js]);
+
+    useEffect(() => {
+        handleFormatCodeRef.current = handleFormatCode;
+    }, [handleFormatCode]);
 
     // Handle code generated from AI
-    const handleCodeGenerated = (generatedCode) => {
+    const handleCodeGenerated = useCallback((generatedCode) => {
         if (readOnly) return; // Don't update if in read-only mode
 
         const { html: generatedHtml, css: generatedCss, js: generatedJs } = generatedCode;
@@ -361,7 +493,7 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
 
         // Save the project with the new code
         saveProject();
-    };
+    }, [readOnly, saveProject]);
 
     return (
         <div className={styles.container}>
@@ -395,6 +527,16 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
                             >
                                 <FiSave size={16} />
                                 <span>{isSaving ? "Saving..." : "Save"}</span>
+                            </button>
+
+                            <button
+                                className={styles.formatButton}
+                                onClick={handleFormatCode}
+                                disabled={isFormatting}
+                                title="Format Code (Shift+Alt+F)"
+                            >
+                                <FiAlignLeft size={16} />
+                                <span>{isFormatting ? "Formatting..." : "Beautify"}</span>
                             </button>
 
                             <button
@@ -499,6 +641,13 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
                     <div className={styles.editorContent}>
                         <Editor
                             height="100%"
+                            theme="vs-dark"
+                            loading={
+                                <div className={styles.editorLoading}>
+                                    <div className={styles.editorSpinner} />
+                                    <span>Loading Editor...</span>
+                                </div>
+                            }
                             language={tabs.find((t) => t.id === activeTab).language}
                             value={activeTab === "html" ? html : activeTab === "css" ? css : js}
                             onChange={(value) => {
@@ -521,7 +670,16 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
                             <FiEye size={16} />
                         </button>
                     </div>
-                    <iframe srcDoc={generateOutput()} title="preview" sandbox="allow-scripts allow-modals allow-forms allow-popups" className={styles.previewFrame} />
+                    <iframe
+                        srcDoc={debouncedSrcDoc}
+                        title="preview"
+                        sandbox="allow-scripts allow-modals allow-forms allow-popups"
+                        className={styles.previewFrame}
+                        style={{
+                            backgroundColor: "#0f172a",
+                            colorScheme: "dark",
+                        }}
+                    />
                 </div>
             </div>
 

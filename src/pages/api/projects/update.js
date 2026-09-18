@@ -13,27 +13,27 @@ export default async function handler(req, res) {
     try {
         const { code, html, css, javascript, title, description } = req.body;
 
-        // Find the project
-        const project = await Project.findOne({ editCode: code });
-
-        if (!project) {
-            return res.status(404).json({ message: "Project not found" });
-        }
-
-        // Build update object with provided data
+        // Build update object with only provided data
         const updateData = {
             lastUpdated: new Date(),
         };
 
-        // Only update fields that were provided
         if (html !== undefined) updateData.html = html;
         if (css !== undefined) updateData.css = css;
         if (javascript !== undefined) updateData.javascript = javascript;
         if (title !== undefined) updateData.title = title;
         if (description !== undefined) updateData.description = description;
 
-        // Update project
-        const updatedProject = await Project.findOneAndUpdate({ editCode: code }, updateData, { new: true });
+        // Atomically update project and return only required fields without Mongoose hydration overhead
+        const updatedProject = await Project.findOneAndUpdate(
+            { editCode: code },
+            { $set: updateData },
+            { new: true, select: "editCode viewCode title" }
+        ).lean();
+
+        if (!updatedProject) {
+            return res.status(404).json({ message: "Project not found" });
+        }
 
         res.status(200).json({
             message: "Project updated successfully",

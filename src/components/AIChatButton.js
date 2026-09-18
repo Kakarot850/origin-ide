@@ -1,9 +1,11 @@
-import { useState } from "react";
-import { useSession, signIn } from "next-auth/react";
-import ChatBot from "./ChatBot";
+import { useState, memo } from "react";
+import { useSession } from "next-auth/react";
+import dynamic from "next/dynamic";
 import { FiCode } from "react-icons/fi";
-import LoginModal from "../components/LoginModal";
-import SignupModal from "../components/SignupModal";
+
+const ChatBot = dynamic(() => import("./ChatBot"), { ssr: false });
+const LoginModal = dynamic(() => import("./LoginModal"), { ssr: false });
+const SignupModal = dynamic(() => import("./SignupModal"), { ssr: false });
 
 const AIChatButton = ({ onCodeGenerated }) => {
     const { data: session } = useSession();
@@ -36,8 +38,6 @@ const AIChatButton = ({ onCodeGenerated }) => {
 
     const toggleChat = () => {
         if (!session) {
-            // If not logged in, show login modal instead
-            // signIn();
             openLoginModal();
         } else {
             setIsChatOpen(!isChatOpen);
@@ -64,10 +64,10 @@ const AIChatButton = ({ onCodeGenerated }) => {
 
             {session && isChatOpen && <ChatBot isOpen={isChatOpen} toggleChat={toggleChat} onCodeGenerated={handleCodeGenerated} />}
 
-            <LoginModal isOpen={isLoginModalOpen} onClose={closeLoginModal} onSwitchToSignup={switchToSignup} />
-            <SignupModal isOpen={isSignupModalOpen} onClose={closeSignupModal} onSwitchToLogin={switchToLogin} />
+            {isLoginModalOpen && <LoginModal isOpen={isLoginModalOpen} onClose={closeLoginModal} onSwitchToSignup={switchToSignup} />}
+            {isSignupModalOpen && <SignupModal isOpen={isSignupModalOpen} onClose={closeSignupModal} onSwitchToLogin={switchToLogin} />}
         </>
     );
 };
 
-export default AIChatButton;
+export default memo(AIChatButton);

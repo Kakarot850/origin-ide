@@ -1,11 +1,14 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { createChatSession, sendMessage, generateCode, isCodeGenerationRequest } from "../service/gemini";
 import ReactMarkdown from "react-markdown";
 import { FiCopy, FiCheck } from "react-icons/fi";
-import CodeGenerationModal from "./CodeGenerationModal";
+
+const CodeGenerationModal = dynamic(() => import("./CodeGenerationModal"), { ssr: false });
 
 const ChatBot = ({ isOpen, toggleChat, onCodeGenerated }) => {
     const [messages, setMessages] = useState([]);
+    const [showAllMessages, setShowAllMessages] = useState(false);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [chatSession, setChatSession] = useState(null);
@@ -214,45 +217,52 @@ ${messages.map((msg) => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.co
         setTimeout(() => setCopiedCode(null), 2000);
     };
 
-    // Custom renderer for code blocks to add copy button
-    const renderers = {
-        code({ node, inline, className, children, ...props }) {
-            const match = /language-(\w+)/.exec(className || "");
-            const codeString = String(children).replace(/\n$/, "");
+    // Custom renderer for code blocks to add copy button - memoized to prevent re-instantiation
+    const renderers = useMemo(
+        () => ({
+            code({ node, inline, className, children, ...props }) {
+                const match = /language-(\w+)/.exec(className || "");
+                const codeString = String(children).replace(/\n$/, "");
 
-            if (!inline && match) {
-                const language = match[1];
-                const codeId = `code-${props.key || Math.random().toString(36).substring(7)}`;
+                if (!inline && match) {
+                    const language = match[1];
+                    const codeId = `code-${props.key || Math.random().toString(36).substring(7)}`;
 
-                return (
-                    <div className="code-block-wrapper">
-                        <div className="code-header">
-                            <span className="code-language">{language}</span>
-                            <button className="copy-button" onClick={() => copyToClipboard(codeString, codeId)} aria-label="Copy code">
-                                {copiedCode === codeId ? <FiCheck size={14} /> : <FiCopy size={14} />}
-                                {copiedCode === codeId ? "Copied!" : "Copy"}
-                            </button>
+                    return (
+                        <div className="code-block-wrapper">
+                            <div className="code-header">
+                                <span className="code-language">{language}</span>
+                                <button className="copy-button" onClick={() => copyToClipboard(codeString, codeId)} aria-label="Copy code">
+                                    {copiedCode === codeId ? <FiCheck size={14} /> : <FiCopy size={14} />}
+                                    {copiedCode === codeId ? "Copied!" : "Copy"}
+                                </button>
+                            </div>
+                            <pre className={className} {...props}>
+                                <code>{children}</code>
+                            </pre>
                         </div>
-                        <pre className={className} {...props}>
-                            <code>{children}</code>
-                        </pre>
-                    </div>
-                );
-            }
+                    );
+                }
 
-            return inline ? (
-                <code className={className} {...props}>
-                    {children}
-                </code>
-            ) : (
-                <pre className={className} {...props}>
-                    <code>{children}</code>
-                </pre>
-            );
-        },
-    };
+                return inline ? (
+                    <code className={className} {...props}>
+                        {children}
+                    </code>
+                ) : (
+                    <pre className={className} {...props}>
+                        <code>{children}</code>
+                    </pre>
+                );
+            },
+        }),
+        [copiedCode]
+    );
 
     if (!isOpen) return null;
+
+    const MAX_VISIBLE_MESSAGES = 40;
+    const hasOlderMessages = messages.length > MAX_VISIBLE_MESSAGES && !showAllMessages;
+    const visibleMessages = hasOlderMessages ? messages.slice(-MAX_VISIBLE_MESSAGES) : messages;
 
     return (
         <>
@@ -264,7 +274,26 @@ ${messages.map((msg) => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.co
                     </button>
                 </div>
                 <div className="messages-container">
-                    {messages.map((msg, index) => (
+                    {hasOlderMessages && (
+                        <button
+                            type="button"
+                            onClick={() => setShowAllMessages(true)}
+                            style={{
+                                display: "block",
+                                margin: "0.5rem auto",
+                                padding: "0.4rem 0.8rem",
+                                fontSize: "0.8rem",
+                                color: "#4ecdc4",
+                                backgroundColor: "transparent",
+                                border: "1px solid #333",
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                            }}
+                        >
+                            Show {messages.length - MAX_VISIBLE_MESSAGES} older messages
+                        </button>
+                    )}
+                    {visibleMessages.map((msg, index) => (
                         <div key={index} className={`message ${msg.role}`}>
                             {msg.role === "bot" ? (
                                 <ReactMarkdown className="markdown-content" components={renderers}>
@@ -293,13 +322,15 @@ ${messages.map((msg) => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.co
             </div>
 
             {/* Code Generation Modal */}
-            <CodeGenerationModal
-                isOpen={showCodeModal}
-                onClose={() => setShowCodeModal(false)}
-                generatedCode={generatedCode}
-                onAccept={handleAcceptCode}
-                isLoading={isGeneratingCode}
-            />
+            {showCodeModal && (
+                <CodeGenerationModal
+                    isOpen={showCodeModal}
+                    onClose={() => setShowCodeModal(false)}
+                    generatedCode={generatedCode}
+                    onAccept={handleAcceptCode}
+                    isLoading={isGeneratingCode}
+                />
+            )}
         </>
     );
 };

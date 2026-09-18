@@ -3,8 +3,10 @@ import { useRouter } from "next/router";
 import { useSession, signOut } from "next-auth/react";
 import axios from "axios";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import styles from "../styles/Dashboard.module.css";
-import CreateProjectModal from "../components/CreateProjectModal";
+
+const CreateProjectModal = dynamic(() => import("../components/CreateProjectModal"), { ssr: false });
 import {
     FiCode,
     FiPlus,
@@ -23,7 +25,6 @@ import {
     FiAlertCircle,
     FiLogOut,
 } from "react-icons/fi";
-import { set } from "mongoose";
 
 export default function Dashboard() {
     const router = useRouter();

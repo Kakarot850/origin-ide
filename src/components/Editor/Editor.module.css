@@ -144,6 +144,34 @@
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
+.formatButton {
+    background-color: #2d2d2d;
+    border: 1px solid #444;
+    color: #e0e0e0;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.formatButton:hover:not(:disabled) {
+    background-color: #383838;
+    color: #4ecdc4;
+    border-color: #4ecdc4;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.formatButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .infoButton {
     background-color: transparent;
     border: 1px solid #4ecdc4;
@@ -263,6 +291,7 @@
     flex-direction: column;
     width: 50%;
     border-right: 1px solid #3a3a3a;
+    background-color: #1e1e1e;
 }
 
 .editorTabs {
@@ -420,6 +449,39 @@
 .editorContent {
     flex: 1;
     overflow: hidden;
+    background-color: #1e1e1e;
+    position: relative;
+}
+
+.editorLoading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+    background-color: #1e1e1e;
+    color: #888;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+}
+
+.editorSpinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid #333;
+    border-top: 3px solid #4ecdc4;
+    border-radius: 50%;
+    animation: editorSpin 1s linear infinite;
+}
+
+@keyframes editorSpin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 /* Preview Section */
@@ -427,6 +489,7 @@
     display: flex;
     flex-direction: column;
     width: 50%;
+    background-color: #0f172a;
 }
 
 .previewHeader {
@@ -471,7 +534,8 @@
 .previewFrame {
     flex: 1;
     border: none;
-    background-color: white;
+    background-color: #0f172a;
+    color-scheme: dark;
 }
 
 /* Modal styles */
