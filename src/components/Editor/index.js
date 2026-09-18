@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
 import Editor from "@monaco-editor/react";
@@ -8,6 +8,9 @@ import AIChatButton from "../AIChatButton";
 import styles from "./Editor.module.css";
 import { FiSave, FiCode, FiLayout, FiColumns, FiEye, FiGrid, FiHome, FiEdit, FiCheck, FiSettings, FiInfo, FiX, FiRotateCcw } from "react-icons/fi";
 import { DEFAULT_TEMPLATES } from "@/utils/templates";
+import { emmetHTML, emmetCSS } from "emmet-monaco-es";
+
+let emmetConfigured = false;
 
 export default function CodeEditor({ initialData, readOnly, editCode, viewCode }) {
     const router = useRouter();
@@ -78,6 +81,91 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
         },
     ];
 
+    const editorRef = useRef(null);
+    const monacoRef = useRef(null);
+
+    const handleEditorDidMount = (editor, monaco) => {
+        editorRef.current = editor;
+        monacoRef.current = monaco;
+
+        // Register Emmet for HTML and CSS using a single-instance guard to prevent duplicate bindings on re-mounts
+        if (!emmetConfigured && typeof window !== "undefined") {
+            try {
+                emmetHTML(monaco, ["html"]);
+                emmetCSS(monaco, ["css"]);
+                emmetConfigured = true;
+            } catch (error) {
+                console.error("Failed to initialize Emmet:", error);
+            }
+        }
+
+        // Configure JavaScript compiler options to target ES2020 with allowJs: true
+        if (monaco.languages?.typescript?.javascriptDefaults) {
+            monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+                target: monaco.languages.typescript.ScriptTarget?.ES2020 ?? 7,
+                allowNonTsExtensions: true,
+                allowJs: true,
+            });
+            monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+                noSemanticValidation: false,
+                noSyntaxValidation: false,
+            });
+        }
+
+        // Enable default HTML5 tag suggestions via monaco.languages.html.htmlDefaults
+        if (monaco.languages?.html?.htmlDefaults) {
+            monaco.languages.html.htmlDefaults.setOptions({
+                format: {
+                    tabSize: 2,
+                    insertSpaces: true,
+                    wrapLineLength: 120,
+                    unformatted: "default",
+                    contentUnformatted: "pre,code,textarea",
+                    indentInnerHtml: true,
+                    preserveNewLines: true,
+                    maxPreserveNewLines: null,
+                    indentHandlebars: false,
+                    endWithNewline: false,
+                    extraLiners: "head, body, /html",
+                    wrapAttributes: "auto",
+                },
+                suggest: {
+                    html5: true,
+                },
+            });
+        }
+
+        // Enable CSS property validation, linting rules, and default CSS data providers via monaco.languages.css.cssDefaults
+        if (monaco.languages?.css?.cssDefaults) {
+            monaco.languages.css.cssDefaults.setOptions({
+                validate: true,
+                lint: {
+                    compatibleVendorPrefixes: "warning",
+                    vendorPrefix: "warning",
+                    duplicateProperties: "warning",
+                    emptyRules: "warning",
+                    importStatement: "ignore",
+                    boxModel: "ignore",
+                    universalSelector: "ignore",
+                    zeroUnits: "ignore",
+                    fontFaceProperties: "warning",
+                    hexColorLength: "error",
+                    argumentsInColorFunction: "error",
+                    unknownProperties: "warning",
+                    ieHack: "ignore",
+                    unknownVendorSpecificProperties: "ignore",
+                    propertyIgnoredDueToDisplay: "warning",
+                    important: "ignore",
+                    float: "ignore",
+                    idSelector: "ignore",
+                },
+                data: {
+                    useDefaultProviders: true,
+                },
+            });
+        }
+    };
+
     const editorOptions = {
         minimap: { enabled: false },
         fontSize: 14,
@@ -91,6 +179,47 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
         padding: { top: 10 },
         fontFamily: "'Fira Code', monospace",
         fontLigatures: true,
+        // IntelliSense & Autocomplete options
+        quickSuggestions: {
+            other: true,
+            comments: true,
+            strings: true,
+        },
+        suggestOnTriggerCharacters: true,
+        acceptSuggestionOnEnter: "on",
+        tabCompletion: "on",
+        snippetSuggestions: "top",
+        parameterHints: {
+            enabled: true,
+        },
+        suggest: {
+            showKeywords: true,
+            showSnippets: true,
+            showWords: true,
+            showMethods: true,
+            showFunctions: true,
+            showConstructors: true,
+            showFields: true,
+            showVariables: true,
+            showClasses: true,
+            showStructs: true,
+            showInterfaces: true,
+            showModules: true,
+            showProperties: true,
+            showEvents: true,
+            showOperators: true,
+            showUnits: true,
+            showValues: true,
+            showConstants: true,
+            showEnums: true,
+            showEnumMembers: true,
+            showColors: true,
+            showFiles: true,
+            showReferences: true,
+            showFolders: true,
+            showTypeParameters: true,
+            snippetsPreventQuickSuggestions: false,
+        },
     };
 
     const saveProject = async () => {
@@ -379,6 +508,7 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
                                     if (activeTab === "js") setJs(value);
                                 }
                             }}
+                            onMount={handleEditorDidMount}
                             options={editorOptions}
                         />
                     </div>
