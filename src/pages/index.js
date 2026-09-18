@@ -6,12 +6,12 @@ import Script from "next/script";
 import styles from "../styles/Home.module.css";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import axios from "axios";
 import FeatureCard from "../components/FeatureCard";
 import CodeEditorPreview from "../components/CodeEditorPreview";
 
 const LoginModal = dynamic(() => import("../components/LoginModal"), { ssr: false });
 const SignupModal = dynamic(() => import("../components/SignupModal"), { ssr: false });
-const CreateProjectModal = dynamic(() => import("../components/CreateProjectModal"), { ssr: false });
 import { FiCode, FiShare2, FiZap, FiLayers, FiMonitor, FiArrowRight, FiLogOut, FiGithub, FiLinkedin, FiAlignLeft } from "react-icons/fi";
 
 export default function Home() {
@@ -21,7 +21,7 @@ export default function Home() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
     const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
-    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [isCreating, setIsCreating] = useState(false);
 
     console.log("Session data:", session); // Debug log
     console.log("Session status:", status); // Debug log
@@ -55,9 +55,20 @@ export default function Home() {
         };
     }, [isMenuOpen]);
 
-    const startNewEditor = () => {
-        // Always allow users to create projects, authenticated or not
-        setIsCreateModalOpen(true);
+    const startNewEditor = async () => {
+        if (isCreating) return;
+        setIsCreating(true);
+        try {
+            const res = await axios.post("/api/projects/create", {});
+            if (res.data?.editCode) {
+                router.push(`/editor/${res.data.editCode}`);
+            } else {
+                setIsCreating(false);
+            }
+        } catch (error) {
+            console.error("Error creating project:", error);
+            setIsCreating(false);
+        }
     };
 
     const toggleMenu = () => {
@@ -262,8 +273,8 @@ export default function Home() {
                             and easy sharing.
                         </p>
                         <div className={styles.heroButtons}>
-                            <button onClick={startNewEditor} className={styles.primaryButton}>
-                                Start Coding <FiArrowRight size={16} />
+                            <button onClick={startNewEditor} className={styles.primaryButton} disabled={isCreating}>
+                                {isCreating ? "Creating..." : <>Start Coding <FiArrowRight size={16} /></>}
                             </button>
                             <a href="#features" className={styles.secondaryButton}>
                                 Explore Features
@@ -332,8 +343,8 @@ export default function Home() {
                 </div>
 
                 <div className={styles.workflowActions}>
-                    <button className={styles.primaryButton} onClick={startNewEditor}>
-                        Get Started <FiArrowRight size={16} />
+                    <button className={styles.primaryButton} onClick={startNewEditor} disabled={isCreating}>
+                        {isCreating ? "Creating..." : <>Get Started <FiArrowRight size={16} /></>}
                     </button>
                 </div>
             </section>
@@ -386,7 +397,6 @@ export default function Home() {
             {/* Modals */}
             <LoginModal isOpen={isLoginModalOpen} onClose={closeLoginModal} onSwitchToSignup={switchToSignup} />
             <SignupModal isOpen={isSignupModalOpen} onClose={closeSignupModal} onSwitchToLogin={switchToLogin} />
-            <CreateProjectModal isOpen={isCreateModalOpen} onClose={closeCreateProjectModal} />
         </div>
     );
 }

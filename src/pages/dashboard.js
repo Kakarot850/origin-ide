@@ -5,8 +5,6 @@ import axios from "axios";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import styles from "../styles/Dashboard.module.css";
-
-const CreateProjectModal = dynamic(() => import("../components/CreateProjectModal"), { ssr: false });
 import {
     FiCode,
     FiPlus,
@@ -34,7 +32,7 @@ export default function Dashboard() {
 
     const [projects, setProjects] = useState([]);
     const [isProjectsLoading, setIsProjectsLoading] = useState(false);
-    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [isCreating, setIsCreating] = useState(false);
     const [projectToDelete, setProjectToDelete] = useState(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [sortBy, setSortBy] = useState("lastUpdated");
@@ -75,7 +73,19 @@ export default function Dashboard() {
     };
 
     const handleCreateNewProject = async () => {
-        setIsCreateModalOpen(true);
+        if (isCreating) return;
+        setIsCreating(true);
+        try {
+            const response = await axios.post("/api/projects/create", {});
+            if (response.data?.editCode) {
+                router.push(`/editor/${response.data.editCode}`);
+            } else {
+                setIsCreating(false);
+            }
+        } catch (error) {
+            console.error("Error creating project:", error);
+            setIsCreating(false);
+        }
     };
 
     const handleOpenProject = (editCode) => {
@@ -157,10 +167,6 @@ export default function Dashboard() {
         return languages.join(" / ") || "Empty";
     };
 
-    const closeCreateProjectModal = () => {
-        setIsCreateModalOpen(false);
-    };
-
     // Filter and sort projects
     const filteredProjects = projects
         .filter(
@@ -224,9 +230,9 @@ export default function Dashboard() {
                         <p>Manage your code projects and share them with others</p>
                     </div>
 
-                    <button className={styles.newProjectButton} onClick={handleCreateNewProject}>
+                    <button className={styles.newProjectButton} onClick={handleCreateNewProject} disabled={isCreating}>
                         <FiPlus size={16} />
-                        New Project
+                        {isCreating ? "Creating..." : "New Project"}
                     </button>
                 </div>
 
@@ -383,8 +389,8 @@ export default function Dashboard() {
                         ) : (
                             <p>You haven't created any projects yet. Create your first project to get started!</p>
                         )}
-                        <button className={styles.createFirstButton} onClick={handleCreateNewProject}>
-                            Create First Project
+                        <button className={styles.createFirstButton} onClick={handleCreateNewProject} disabled={isCreating}>
+                            {isCreating ? "Creating..." : "Create First Project"}
                         </button>
                     </div>
                 )}
@@ -471,7 +477,6 @@ export default function Dashboard() {
                     </div>
                 </div>
             )}
-            <CreateProjectModal isOpen={isCreateModalOpen} onClose={closeCreateProjectModal} />
         </div>
     );
 }

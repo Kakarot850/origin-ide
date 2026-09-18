@@ -11,7 +11,20 @@ export default async function handler(req, res) {
     await dbConnect();
 
     try {
-        const { code, html, css, javascript, title, description } = req.body;
+        let body = req.body;
+        if (typeof body === "string") {
+            try {
+                body = JSON.parse(body);
+            } catch (e) {
+                console.warn("Failed to parse request body as JSON in update.js:", e);
+            }
+        }
+
+        const { code, html, css, javascript, title, description } = body || {};
+
+        if (!code) {
+            return res.status(400).json({ message: "Project code is required" });
+        }
 
         // Build update object with only provided data
         const updateData = {

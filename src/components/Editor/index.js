@@ -52,6 +52,8 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
     const [saveStatus, setSaveStatus] = useState("");
     const [projectTitle, setProjectTitle] = useState(initialData?.title || "Untitled Project");
     const [projectDescription, setProjectDescription] = useState(initialData?.description || "");
+    const [isEditingTitle, setIsEditingTitle] = useState(false);
+    const [tempTitle, setTempTitle] = useState(initialData?.title || "Untitled Project");
     const [showTitleModal, setShowTitleModal] = useState(false);
     const [showDescriptionModal, setShowDescriptionModal] = useState(false);
     const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
@@ -59,6 +61,40 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
     const [isSaving, setIsSaving] = useState(false);
     const [isOwner, setIsOwner] = useState(false);
     const [layout, setLayout] = useState("split"); // "split", "editor", "preview"
+
+    const hasUnsavedChangesRef = useRef(false);
+    const latestStateRef = useRef({
+        html,
+        css,
+        js,
+        projectTitle,
+        projectDescription,
+        editCode,
+        readOnly,
+        isOwner,
+    });
+
+    useEffect(() => {
+        setTempTitle(projectTitle);
+    }, [projectTitle]);
+
+    useEffect(() => {
+        latestStateRef.current = {
+            html,
+            css,
+            js,
+            projectTitle,
+            projectDescription,
+            editCode,
+            readOnly,
+            isOwner,
+        };
+    }, [html, css, js, projectTitle, projectDescription, editCode, readOnly, isOwner]);
+
+    // Track unsaved modifications
+    useEffect(() => {
+        hasUnsavedChangesRef.current = true;
+    }, [html, css, js, projectTitle, projectDescription]);
 
     // Check if the current user is the owner of the project
     useEffect(() => {
@@ -265,6 +301,7 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
                 description: isOwner ? projectDescription : undefined, // Only owner can edit description
             });
 
+            hasUnsavedChangesRef.current = false;
             setSaveStatus("Saved!");
             setTimeout(() => setSaveStatus(""), 2000);
         } catch (error) {
@@ -275,6 +312,63 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
             setIsSaving(false);
         }
     }, [readOnly, isSaving, editCode, html, css, js, isOwner, projectTitle, projectDescription]);
+
+    const flushSave = useCallback(() => {
+        const state = latestStateRef.current;
+        if (state.readOnly || !state.editCode || !hasUnsavedChangesRef.current) return;
+
+        const payload = JSON.stringify({
+            code: state.editCode,
+            html: state.html,
+            css: state.css,
+            javascript: state.js,
+            title: state.isOwner ? state.projectTitle : undefined,
+            description: state.isOwner ? state.projectDescription : undefined,
+        });
+
+        hasUnsavedChangesRef.current = false;
+
+        // Try navigator.sendBeacon first
+        try {
+            if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+                const blob = new Blob([payload], { type: "application/json" });
+                const sent = navigator.sendBeacon("/api/projects/update", blob);
+                if (sent) return;
+            }
+        } catch (err) {
+            console.warn("sendBeacon error:", err);
+        }
+
+        // Fallback to fetch with keepalive: true
+        try {
+            if (typeof fetch !== "undefined") {
+                fetch("/api/projects/update", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: payload,
+                    keepalive: true,
+                }).catch((e) => console.warn("keepalive fetch error:", e));
+            }
+        } catch (err) {
+            console.warn("Flush fetch error:", err);
+        }
+    }, []);
+
+    // Tab/window lifecycle unload listeners & component unmount flush
+    useEffect(() => {
+        const handlePageHide = () => {
+            flushSave();
+        };
+
+        window.addEventListener("pagehide", handlePageHide);
+        window.addEventListener("beforeunload", handlePageHide);
+
+        return () => {
+            window.removeEventListener("pagehide", handlePageHide);
+            window.removeEventListener("beforeunload", handlePageHide);
+            flushSave();
+        };
+    }, [flushSave]);
 
     const generateOutput = useCallback((customHtml = html, customCss = css, customJs = js, customTitle = projectTitle) => {
         const titleTag = `<title>${customTitle || "Origin IDE"}</title>`;
@@ -506,14 +600,67 @@ export default function CodeEditor({ initialData, readOnly, editCode, viewCode }
                 </div>
 
                 <div className={styles.projectTitleArea}>
-                    <h1 className={styles.projectTitle}>
-                        {projectTitle}
-                        {!readOnly && isOwner && (
-                            <button className={styles.editButton} onClick={() => setShowTitleModal(true)} title="Edit Title">
-                                <FiEdit size={14} />
-                            </button>
-                        )}
-                    </h1>
+                    {isEditingTitle && !readOnly && isOwner ? (
+                        <input
+                            type="text"
+                            value={tempTitle}
+                            onChange={(e) => setTempTitle(e.target.value)}
+                            onBlur={() => {
+                                setIsEditingTitle(false);
+                                const trimmed = tempTitle.trim();
+                                if (trimmed && trimmed !== projectTitle) {
+                                    setProjectTitle(trimmed);
+                                    hasUnsavedChangesRef.current = true;
+                                } else {
+                                    setTempTitle(projectTitle);
+                                }
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                    setIsEditingTitle(false);
+                                    const trimmed = tempTitle.trim();
+                                    if (trimmed && trimmed !== projectTitle) {
+                                        setProjectTitle(trimmed);
+                                        hasUnsavedChangesRef.current = true;
+                                    } else {
+                                        setTempTitle(projectTitle);
+                                    }
+                                } else if (e.key === "Escape") {
+                                    setIsEditingTitle(false);
+                                    setTempTitle(projectTitle);
+                                }
+                            }}
+                            className={styles.inlineTitleInput}
+                            autoFocus
+                        />
+                    ) : (
+                        <h1
+                            className={styles.projectTitle}
+                            onClick={() => {
+                                if (!readOnly && isOwner) {
+                                    setTempTitle(projectTitle);
+                                    setIsEditingTitle(true);
+                                }
+                            }}
+                            title={!readOnly && isOwner ? "Click to rename project" : projectTitle}
+                            style={{ cursor: !readOnly && isOwner ? "pointer" : "default" }}
+                        >
+                            <span>{projectTitle}</span>
+                            {!readOnly && isOwner && (
+                                <button
+                                    className={styles.editButton}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setTempTitle(projectTitle);
+                                        setIsEditingTitle(true);
+                                    }}
+                                    title="Rename Project"
+                                >
+                                    <FiEdit size={14} />
+                                </button>
+                            )}
+                        </h1>
+                    )}
                 </div>
 
                 <div className={styles.actions}>
